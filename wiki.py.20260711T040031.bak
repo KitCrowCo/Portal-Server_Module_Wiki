@@ -38,11 +38,6 @@ def resolve_path(rel_path: str) -> pathlib.Path:
     if not str(p).startswith(str(base)): raise HTTPException(status_code=400, detail="Path outside WIKI_ROOT")
     return p
 
-def display_name(name_or_path: str) -> str:
-    """Hides the .md extension for display; any other extension is shown as-is."""
-    p = Path(name_or_path)
-    return p.stem if p.suffix.lower() == ".md" else p.name
-
 def _wiki_link(m: re.Match, base_dir: str = "") -> str:
     """[[path/page]] or [[path/page|Display]]. No extension in the written link means .md; an explicit extension is used exactly as written - [[notes.txt]] resolves to notes.txt, never notes.txt.md."""
     target, _, alias = m.group(1).partition("|")
@@ -94,13 +89,8 @@ async def wiki_state(request: Request, state: dict = None) -> dict:
 
 def _ensure_home_exists():
     home = WIKI_ROOT / "home.md"
-    if home.exists(): return
-    default_src = Path(__file__).parent / "static" / "home_default.md"
-    text = default_src.read_text(encoding="utf-8") if default_src.exists() else "# Welcome to the Wiki\n\nThis is the home page. Edit it to get started.\n"
-    if (WIKI_ROOT / "Information").exists(): text += "\n\n## Getting Started\n\n- [[Information/getting_started|Getting Started]]\n- [[Information/about|About This Server]]\n"
-    if (WIKI_ROOT / "Modules").exists(): text += "\n\n## Installed Modules\n\n- [[Modules|Browse module documentation]]\n"
-    home.write_text(text, encoding="utf-8")
-    
+    if not home.exists(): home.write_text("# Welcome to the Wiki\n\nThis is the home page. Edit it to get started.\n", encoding="utf-8")
+
 # --- IM intent handlers (module-level, reference globals set by init_module) ---
 
 async def _intent_wiki_link(request, payload, imr):
@@ -114,11 +104,11 @@ async def _intent_wiki_link(request, payload, imr):
         state = await wiki_state(request)
         active = state.get("active")
         if active and active in state["tabs"]:
-            state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, display_name(p.name)
+            state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, p.name
             await wiki_state(request, state)
             return await TM._push(request, state, imr)
-    tid = f"wiki-{abs(hash(rel)) % 0xFFFFFF:06x}"
-    return await TM._open(request, {"id": tid, "path": rel, "label": display_name(p.name), "icon": "&#x1F4C4;"}, imr)
+    tid = f"wiki-{abs(hash(rel)) % 0xFFFFFF:06x}"   # always derived from the resolved path - never trust the caller's id, or tree-clicks and wikilink-clicks to the same page produce different tab ids
+    return await TM._open(request, {"id": tid, "path": rel, "label": p.name, "icon": "&#x1F4C4;"}, imr)
 
 # --- Access Control ---
 # Global edit_roles/view_roles (settings) gate the whole wiki. Rules here narrow further per path-prefix or tag.
