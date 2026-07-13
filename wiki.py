@@ -396,6 +396,11 @@ async def ctx_menu(request: Request, path: str):
             <input type="text" name="tags" value="{UI.escape(tags)}" placeholder="tags, comma-sep" class="module-select" style="font-size:.7rem;flex:1">
             <button class="btn-icon" style="font-size:.7rem">&#x2713;</button>
         </form>
+        <form hx-post="{_P}/rename" hx-target="#wiki-tree-panel" hx-swap="innerHTML" style="display:flex;gap:.3rem">
+            <input type="hidden" name="path" value="{UI.escape(path)}">
+            <input type="text" name="new_name" placeholder="new name" value="{UI.escape(Path(path).name)}" class="module-select" style="font-size:.7rem;flex:1">
+            <button class="btn-icon" style="font-size:.7rem" title="Rename">&#x270E;</button>
+        </form>
         <button class="btn-icon" style="text-align:left" hx-post="{_P}/duplicate" hx-vals='{{"path":"{UI.escape(path)}"}}' hx-target="#wiki-tree-panel" hx-swap="innerHTML">&#x2398; Duplicate</button>
         <button class="btn-icon" style="text-align:left" hx-get="{_P}/move_modal?path={urllib.parse.quote(path)}" hx-target="#wiki-new-modal" hx-swap="innerHTML">&#x21C4; Move</button>
         <button class="btn-icon" style="text-align:left;color:#ff5f5f" hx-get="{_P}/delete_confirm?path={urllib.parse.quote(path)}" hx-target="#wiki-new-modal" hx-swap="innerHTML">&#x2715; Delete</button>
@@ -417,6 +422,13 @@ async def move_modal(request: Request, path: str):
 async def move_item(request: Request, path: str = Form(...), parent: str = Form("")):
     if not _can_edit(request, path): return HTMLResponse("Unauthorized", status_code=403)
     FM.move(path, parent)
+    return HTMLResponse(_wiki_tree_html(request))
+
+@router.post("/rename", response_class=HTMLResponse)
+async def rename_item(request: Request, path: str = Form(...), new_name: str = Form(...)):
+    if not _can_edit(request, path): return HTMLResponse("Unauthorized", status_code=403)
+    try: FM.rename(path, new_name.strip())
+    except Exception as e: return HTMLResponse(f"Rename failed: {UI.escape(str(e))}", status_code=400)
     return HTMLResponse(_wiki_tree_html(request))
 
 @router.post("/delete", response_class=HTMLResponse)
