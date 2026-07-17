@@ -33,10 +33,11 @@ def resolve_path(rel_path: str) -> pathlib.Path:
     base = WIKI_ROOT.resolve()
     if rel_path in (None, "", "."): return base
     p_in = pathlib.Path(rel_path)
-    # p = p_in.resolve() if str(p_in).startswith(str(base)) else (base / str(p_in).replace("data/wiki/pages/", "").lstrip("/")).resolve()
     p = p_in.resolve() if str(p_in).startswith(str(base)) else (base / str(p_in).replace("data/_common/", "").lstrip("/")).resolve()
     if not str(p).startswith(str(base)): raise HTTPException(status_code=400, detail="Path outside WIKI_ROOT")
     return p
+
+def _resolve_relative(target: str, base_dir: str) -> str: return os.path.normpath(f"{base_dir}/{target}" if base_dir else target).replace("\\", "/").lstrip("/")
 
 def display_name(name_or_path: str) -> str:
     """Hides the .md extension for display; any other extension is shown as-is."""
@@ -47,10 +48,7 @@ def _wiki_link(m: re.Match, base_dir: str = "") -> str:
     """[[path/page]] or [[path/page|Display]]. No extension in the written link means .md; an explicit extension is used exactly as written - [[notes.txt]] resolves to notes.txt, never notes.txt.md."""
     target, _, alias = m.group(1).partition("|")
     target, alias = target.strip(), alias.strip()
-    if target.startswith("./") or target.startswith("../"):
-        resolved = (Path(base_dir) / target).resolve() if base_dir else Path(target.lstrip("./"))
-        try: target = str(resolved.relative_to(WIKI_ROOT.resolve())).replace("\\","/")
-        except ValueError: pass
+    if target.startswith("./") or target.startswith("../"): target = _resolve_relative(target, base_dir)
     has_ext = bool(Path(target).suffix)
     file_path = target if has_ext else f"{target}.md"
     display = alias or Path(target).name
@@ -61,10 +59,7 @@ def _wiki_link(m: re.Match, base_dir: str = "") -> str:
 def _wiki_embed(m: re.Match, base_dir: str = "") -> str:
     """[[file]] (block ![[...]] embed). './'/'../' resolve relative to the current document's folder."""
     target = m.group(1).strip()
-    if target.startswith("./") or target.startswith("../"):
-        resolved = (Path(base_dir) / target).resolve() if base_dir else Path(target.lstrip("./"))
-        try: target = str(resolved.relative_to(WIKI_ROOT.resolve())).replace("\\","/")
-        except ValueError: pass  # would escape WIKI_ROOT - leave target unchanged, link will 404 safely
+    if target.startswith("./") or target.startswith("../"): target = _resolve_relative(target, base_dir)
     ext = Path(target).suffix.lower()
     url = f"{_P}/raw/{target}"
     if ext in (".png",".jpg",".jpeg",".gif",".webp",".svg"): return f'<img src="{url}" alt="{UI.escape(target)}" style="max-width:100%;border-radius:var(--radius);">'
@@ -114,11 +109,27 @@ async def _intent_wiki_link(request, payload, imr):
         state = await wiki_state(request)
         active = state.get("active")
         if active and active in state["tabs"]:
+            hist = state["tabs"][active].setdefault("history", [])
+            if state["tabs"][active].get("path"): hist.append(tab["path"])
+            state["tabs"][active]["history"] = hist[-50:]
             state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, display_name(p.name)
             await wiki_state(request, state)
             return await TM._push(request, state, imr)
     tid = f"wiki-{abs(hash(rel)) % 0xFFFFFF:06x}"
     return await TM._open(request, {"id": tid, "path": rel, "label": display_name(p.name), "icon": "&#x1F4C4;"}, imr)
+
+
+
+async def _intent_wiki_back(request, payload, imr):
+    state = await wiki_state(request)
+    active = state.get("active")
+    if not active or active not in state["tabs"]: return imr
+    tab = state["tabs"][active]
+    hist = tab.get("history", [])
+    if not hist: return imr
+    tab["path"] = hist.pop(); tab["label"] = display_name(Path(tab["path"]).name)
+    await wiki_state(request, state)
+    return await TM._push(request, state, imr)
 
 # --- Access Control ---
 # Global edit_roles/view_roles (settings) gate the whole wiki. Rules here narrow further per path-prefix or tag.
@@ -191,6 +202,7 @@ def init_module(env: dict):
     TM = BI.TabManager(namespace="wiki", tab_bar_id="wiki-tab-bar", content_id="wiki-workspace", render_content_fn=_render_active_tab, intent_prefix="wiki", IM=IM, scope="user", empty={"tabs": {"home": {"id": "home", "path": "home.md", "label": "Home", "icon": "&#x1F3E0;", "order": 0}}, "active": "home"}, nesting_level=1)
     FM = BI.FileManager(WIKI_ROOT)
     IM.scripts["wiki_nav_link"] = [_intent_wiki_link]
+    IM.scripts["wiki_back"] = [_intent_wiki_back]
 
     class _WikiEditor(BI.PortalEditor):
         def render_preview(self, content: str, **kwargs) -> str:
@@ -318,8 +330,9 @@ async def index(request: Request):
     left = f"""<div style="display:flex; flex-direction:column; height:100%; overflow:hidden">
                     <div style="padding:.35rem .5rem;border-bottom:var(--border-thick) solid var(--border); display:flex;align-items:center; gap:.3rem; flex-shrink:0; background:var(--bg_panel)">
                         <span style="font-size:.82rem;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{UI.escape(wiki_title)}</span>
-                        <button class="btn-icon" style="font-size:.85rem" title="New file / folder / upload" hx-get="{_P}/new_modal" hx-target="#wiki-new-modal" hx-swap="innerHTML">&#x2795;</button>
-                        <button class="btn-icon" style="font-size:.75rem" hx-get="{_P}/settings" hx-target="#wiki-workspace" hx-swap="innerHTML" title="Settings">&#x2699;</button>
+                        <button class="btn-icon" style="font-size:.8rem" hx-post="/im/in" hx-vals='{{"type":"wiki_back","branch":"'+IM.branch_id+'","lvl":1}}'>&#x1F519;</button>
+                        <button class="btn-icon" style="font-size:.8rem" title="New file / folder / upload" hx-get="{_P}/new_modal" hx-target="#wiki-new-modal" hx-swap="innerHTML">&#x2795;</button>
+                        <button class="btn-icon" style="font-size:.8rem" hx-get="{_P}/settings" hx-target="#wiki-workspace" hx-swap="innerHTML" title="Settings">&#x2699;</button>
                     </div>
                     <div id="wiki-tree-panel" style="flex:1; overflow-y:auto; font-size:.7rem;">{_wiki_tree_html(request, active_path)}</div>
                 </div>"""
