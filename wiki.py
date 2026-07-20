@@ -109,8 +109,8 @@ async def _intent_wiki_link(request, payload, imr):
         state = await wiki_state(request)
         active = state.get("active")
         if active and active in state["tabs"]:
-            hist = state["tabs"][active].setdefault("history", [])
-            if state["tabs"][active].get("path"): hist.append(tab["path"])
+            TM.push_history(state["tabs"][active], state["tabs"][active].get("path", ""))
+            state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, display_name
             state["tabs"][active]["history"] = hist[-50:]
             state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, display_name(p.name)
             await wiki_state(request, state)
@@ -330,7 +330,7 @@ async def index(request: Request):
     left = f"""<div style="display:flex; flex-direction:column; height:100%; overflow:hidden">
                     <div style="padding:.35rem .5rem;border-bottom:var(--border-thick) solid var(--border); display:flex;align-items:center; gap:.3rem; flex-shrink:0; background:var(--bg_panel)">
                         <span style="font-size:.82rem;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{UI.escape(wiki_title)}</span>
-                        <button class="btn-icon" style="font-size:.8rem" hx-post="/im/in" hx-vals='{{"type":"wiki_back","branch":"'+IM.branch_id+'","lvl":1}}'>&#x1F519;</button>
+                        <button class="btn-icon" hx-post="/im/in" hx-vals='{{"type":"wiki_back","branch":"'+IM.branch_id+'","lvl":1}}'>&#x2190;</button>
                         <button class="btn-icon" style="font-size:.8rem" title="New file / folder / upload" hx-get="{_P}/new_modal" hx-target="#wiki-new-modal" hx-swap="innerHTML">&#x2795;</button>
                         <button class="btn-icon" style="font-size:.8rem" hx-get="{_P}/settings" hx-target="#wiki-workspace" hx-swap="innerHTML" title="Settings">&#x2699;</button>
                     </div>
