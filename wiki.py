@@ -95,7 +95,7 @@ def _ensure_home_exists():
     if (WIKI_ROOT / "Information").exists(): text += "\n\n## Getting Started\n\n- [[Information/getting_started|Getting Started]]\n- [[Information/about|About This Server]]\n"
     if (WIKI_ROOT / "Modules").exists(): text += "\n\n## Installed Modules\n\n- [[Modules|Browse module documentation]]\n"
     home.write_text(text, encoding="utf-8")
-    
+
 # --- IM intent handlers (module-level, reference globals set by init_module) ---
 
 async def _intent_wiki_link(request, payload, imr):
@@ -117,8 +117,6 @@ async def _intent_wiki_link(request, payload, imr):
             return await TM._push(request, state, imr)
     tid = f"wiki-{abs(hash(rel)) % 0xFFFFFF:06x}"
     return await TM._open(request, {"id": tid, "path": rel, "label": display_name(p.name), "icon": "&#x1F4C4;"}, imr)
-
-
 
 async def _intent_wiki_back(request, payload, imr):
     state = await wiki_state(request)
