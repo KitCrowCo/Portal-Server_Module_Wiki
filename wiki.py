@@ -14,7 +14,6 @@ MODULE_META = {"label": "Wiki", "icon": "&#x2139;", "description": "Markdown kno
 router = APIRouter()
 _P = "/module/wiki"
 DATA_DIR = Path("./data/wiki")
-#WIKI_ROOT = Path(os.path.join(os.getcwd(), "data", "wiki", "pages"))
 WIKI_ROOT = Path(os.path.join(os.getcwd(), "data", "_common"))
 MAX_UPLOAD_BYTES = int(os.getenv("UPLOAD_LIMIT", 4096 * 1024 * 1024))
 
@@ -111,7 +110,7 @@ async def _intent_wiki_link(request, payload, imr):
         if active and active in state["tabs"]:
             TM.push_history(state["tabs"][active], state["tabs"][active].get("path", ""))
             state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, display_name
-            state["tabs"][active]["history"] = hist[-50:]
+            state["tabs"][active]["history"] = [] #hist[-50:] #***********************************************************************
             state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, display_name(p.name)
             await wiki_state(request, state)
             return await TM._push(request, state, imr)
@@ -302,8 +301,8 @@ def _right_sidebar(active_path: str = "") -> str:
 
     def _sec(label, body, open_=False):
         return f"""<details {"open" if open_ else ""} style="border-bottom:var(--border-thick) solid var(--border)">
-                        <summary style="cursor:pointer; list-style:none; padding:.35rem .6rem; user-select:none">{label}</summary>
-                        <div style="padding:.3rem .6rem .5rem;">{body}</div>
+                        <summary style="cursor:pointer; list-style:none; padding:.2rem .4rem; user-select:none">{label}</summary>
+                        <div style="padding:.2rem .4rem .4rem;">{body}</div>
                     </details>"""
     return f"""<div style="display:flex; flex-direction:column; height:100%; overflow:hidden">{info}<div style="flex:1; overflow-y:auto">{_sec("Markdown Reference", md_ref, open_=True)}{_sec("Graphviz DOT", dot_ref)}</div></div>"""
 
@@ -326,7 +325,7 @@ async def index(request: Request):
     wiki_title = (SM.get("title") or "Wiki") if SM else "Wiki"
     active_path = state.get("tabs", {}).get(state.get("active", ""), {}).get("path", "")
     left = f"""<div style="display:flex; flex-direction:column; height:100%; overflow:hidden">
-                    <div style="padding:.35rem .5rem;border-bottom:var(--border-thick) solid var(--border); display:flex;align-items:center; gap:.3rem; flex-shrink:0; background:var(--bg_panel)">
+                    <div style="padding:.2rem .4rem;border-bottom:var(--border-thick) solid var(--border); display:flex;align-items:center; gap:.3rem; flex-shrink:0; background:var(--bg_panel)">
                         <span style="font-size:.82rem;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{UI.escape(wiki_title)}</span>
                         <button class="btn-icon" hx-post="/im/in" hx-vals='{{"type":"wiki_back","branch":"'+IM.branch_id+'","lvl":1}}'>&#x2190;</button>
                         <button class="btn-icon" style="font-size:.8rem" title="New file / folder / upload" hx-get="{_P}/new_modal" hx-target="#wiki-new-modal" hx-swap="innerHTML">&#x2795;</button>
