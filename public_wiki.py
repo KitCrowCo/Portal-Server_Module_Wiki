@@ -39,8 +39,24 @@ def _pub_link(m: re.Match) -> str:
     has_ext = bool(Path(target).suffix)
     file_path = target if has_ext else f"{target}.md"
     display = alias or Path(target).name
-    if _is_public(file_path): return f'<a href="/wiki/{file_path}" style="color:var(--accent);border-bottom:var(--border-thick) dotted var(--accent);text-decoration:none">{UI.escape(display)}</a>'
+    if _is_public(file_path):
+        href = f"/public/wiki/{file_path}" if file_path.lower().endswith(".md") else f"/public/wiki/raw/{file_path}"
+        return f'<a href="{href}" style="color:var(--accent);border-bottom:var(--border-thick) dotted var(--accent);text-decoration:none">{UI.escape(display)}</a>'
     return f'<span style="color:var(--text_muted);text-decoration:line-through;" title="Not publicly available">{UI.escape(display)}</span>'
+
+@router.get("/{path:path}", response_class=HTMLResponse)
+async def public_page(path: str, request: Request):
+    rel = path if Path(path).suffix else f"{path}.md"
+    if not _is_public(rel): raise HTTPException(status_code=404)
+    p = resolve_path(rel)
+    if not p.exists(): raise HTTPException(status_code=404)
+    if p.suffix.lower() != ".md": return FileResponse(p)
+    content = p.read_text(encoding="utf-8")
+    content = re.sub(r'!\[\[([^\]]+)\]\]', _pub_embed, content)
+    content = re.sub(r'\[\[([^\]]+)\]\]', _pub_link, content)
+    rendered = BI.md_plus_transpiler(content, mode="extended")
+    theme_diff = await ENV["resolve_theme"](request, module_ns="wiki")
+    return ENV["templates"].TemplateResponse(name="public_shell.html", request=request, context={"request": request, "title": p.stem, "theme": ENV["theme"], "theme_diff": theme_diff, "content": rendered})
 
 def _pub_embed(m: re.Match) -> str:
     target = m.group(1).strip()
@@ -57,16 +73,3 @@ async def public_raw(path: str):
     p = resolve_path(path)
     if not p.exists(): raise HTTPException(status_code=404)
     return FileResponse(p)
-
-@router.get("/{path:path}", response_class=HTMLResponse)
-async def public_page(path: str, request: Request):
-    rel = path if Path(path).suffix else f"{path}.md"
-    if not _is_public(rel): raise HTTPException(status_code=404)
-    p = resolve_path(rel)
-    if not p.exists() or p.suffix.lower() != ".md": raise HTTPException(status_code=404)
-    content = p.read_text(encoding="utf-8")
-    content = re.sub(r'!\[\[([^\]]+)\]\]', _pub_embed, content)
-    content = re.sub(r'\[\[([^\]]+)\]\]', _pub_link, content)
-    rendered = BI.md_plus_transpiler(content, mode="extended")
-    theme_diff = await ENV["resolve_theme"](request, module_ns="wiki")
-    return ENV["templates"].TemplateResponse(name="public_shell.html", request=request, context={"request": request, "title": p.stem, "theme": ENV["theme"], "theme_diff": theme_diff, "content": rendered})

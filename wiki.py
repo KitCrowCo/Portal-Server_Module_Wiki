@@ -370,9 +370,10 @@ async def new_modal(request: Request):
     return HTMLResponse(BI.new_item_modal_html("wiki-new", f"{_P}/new", FM.folder_picker_html(filter_fn = lambda rel: cached_can_view(rel)), target_id="wiki-tree-panel", swap="innerHTML"))
 
 @router.post("/new", response_class=HTMLResponse)
-async def new_item(request: Request, parent: str = Form(""), kind: str = Form("file"), name: str = Form(""), upload: List[UploadFile] = File(None), rel_paths: str = Form("[]") ):
+async def new_item(request: Request, parent: str = Form(""), kind: str = Form("file"), name: str = Form(""), upload: List[UploadFile] = File(None), rel_paths: str = Form("[]")):
     if not _can_edit(request): return HTMLResponse("Unauthorized", status_code=403)
     base = resolve_path(parent)
+    written = []
     if kind in ["upload", "upload_folder"]:
         if upload:
             paths = json.loads(rel_paths)
@@ -385,6 +386,7 @@ async def new_item(request: Request, parent: str = Form(""), kind: str = Form("f
                         size += len(chunk)
                         if size > MAX_UPLOAD_BYTES: raise HTTPException(status_code=413, detail=f"{path} exceeds {MAX_UPLOAD_BYTES//1024//1024}MB limit")
                         f.write(chunk)
+                written.append(dest)
     elif kind == "folder":
         if name.strip(): (base / name.strip()).mkdir(parents=True, exist_ok=True)
     else:
@@ -393,7 +395,8 @@ async def new_item(request: Request, parent: str = Form(""), kind: str = Form("f
             if not target.suffix: target = target.with_suffix(".md")
             target.parent.mkdir(parents=True, exist_ok=True)
             if not target.exists(): target.write_text("", encoding="utf-8")
-    FM.notify_manual_mutation([str(dest.resolve()) for dest in written_paths], "created")
+            written.append(target)
+    if written: FM.notify_manual_mutation([str(p.resolve()) for p in written], "created")
     return HTMLResponse(_wiki_tree_html(request))
 
 @router.get("/ctx_menu", response_class=HTMLResponse)
