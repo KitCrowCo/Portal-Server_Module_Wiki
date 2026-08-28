@@ -396,7 +396,7 @@ async def new_item(request: Request, parent: str = Form(""), kind: str = Form("f
             target.parent.mkdir(parents=True, exist_ok=True)
             if not target.exists(): target.write_text("", encoding="utf-8")
             written.append(target)
-    if written: FM.notify_manual_mutation([str(p.resolve()) for p in written], "created")
+    if written: FM._trigger_change([str(p.resolve()) for p in written], "created")
     return HTMLResponse(_wiki_tree_html(request))
 
 @router.get("/ctx_menu", response_class=HTMLResponse)
