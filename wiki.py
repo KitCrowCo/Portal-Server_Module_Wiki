@@ -1,4 +1,4 @@
-# /modules/wiki/router.py
+# /modules/wiki/wiki.py
 import re, json, shutil, os, pathlib, uuid
 from pathlib import Path
 from typing import List
