@@ -109,24 +109,11 @@ async def _intent_wiki_link(request, payload, imr):
         active = state.get("active")
         if active and active in state["tabs"]:
             TM.push_history(state["tabs"][active], state["tabs"][active].get("path", ""))
-            state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, display_name
-            state["tabs"][active]["history"] = [] #hist[-50:] #***********************************************************************
             state["tabs"][active]["path"], state["tabs"][active]["label"] = rel, display_name(p.name)
             await wiki_state(request, state)
             return await TM._push(request, state, imr)
     tid = f"wiki-{abs(hash(rel)) % 0xFFFFFF:06x}"
     return await TM._open(request, {"id": tid, "path": rel, "label": display_name(p.name), "icon": "&#x1F4C4;"}, imr)
-
-async def _intent_wiki_back(request, payload, imr):
-    state = await wiki_state(request)
-    active = state.get("active")
-    if not active or active not in state["tabs"]: return imr
-    tab = state["tabs"][active]
-    hist = tab.get("history", [])
-    if not hist: return imr
-    tab["path"] = hist.pop(); tab["label"] = display_name(Path(tab["path"]).name)
-    await wiki_state(request, state)
-    return await TM._push(request, state, imr)
 
 # --- Access Control ---
 # Global edit_roles/view_roles (settings) gate the whole wiki. Rules here narrow further per path-prefix or tag.
@@ -196,10 +183,9 @@ def init_module(env: dict):
         BI.SettingField("loose_breaks", "Treat every Enter as a paragraph break", "checkbox", False, hint="Off (default): a single Enter is a soft line break, a blank line starts a new paragraph. On: every line gets full paragraph spacing."),
     ], json_path=str(DATA_DIR / "settings.json"))])
     IM = ENV["InterfaceManager"](nesting_level=1, db_path="wiki_im.db")
-    TM = BI.TabManager(namespace="wiki", tab_bar_id="wiki-tab-bar", content_id="wiki-workspace", render_content_fn=_render_active_tab, intent_prefix="wiki", IM=IM, scope="user", empty={"tabs": {"home": {"id": "home", "path": "home.md", "label": "Home", "icon": "&#x1F3E0;", "order": 0}}, "active": "home"}, nesting_level=1)
+    TM = BI.TabManager(namespace="wiki", tab_bar_id="wiki-tab-bar", content_id="wiki-workspace", render_content_fn=_render_active_tab, intent_prefix="wiki", IM=IM, scope="user", empty={"tabs": {"home": {"id": "home", "path": "home.md", "label": "Home", "icon": "&#x1F3E0;", "order": 0}}, "active": "home"}, nesting_level=1, show_back=True)
     FM = BI.FileManager(WIKI_ROOT)
     IM.scripts["wiki_nav_link"] = [_intent_wiki_link]
-    IM.scripts["wiki_back"] = [_intent_wiki_back]
 
     class _WikiEditor(BI.PortalEditor):
         def render_preview(self, content: str, **kwargs) -> str:
@@ -327,7 +313,6 @@ async def index(request: Request):
     left = f"""<div style="display:flex; flex-direction:column; height:100%; overflow:hidden">
                     <div style="padding:.2rem .4rem;border-bottom:var(--border-thick) solid var(--border); display:flex;align-items:center; gap:.3rem; flex-shrink:0; background:var(--bg_panel)">
                         <span style="font-size:.82rem;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{UI.escape(wiki_title)}</span>
-                        <button class="btn-icon" hx-post="/im/in" hx-vals='{{"type":"wiki_back","branch":"'+IM.branch_id+'","lvl":1}}'>&#x2190;</button>
                         <button class="btn-icon" style="font-size:.8rem" title="New file / folder / upload" hx-get="{_P}/new_modal" hx-target="#wiki-new-modal" hx-swap="innerHTML">&#x2795;</button>
                         <button class="btn-icon" style="font-size:.8rem" hx-get="{_P}/settings" hx-target="#wiki-workspace" hx-swap="innerHTML" title="Settings">&#x2699;</button>
                     </div>
