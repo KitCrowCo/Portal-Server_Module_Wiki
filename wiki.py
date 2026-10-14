@@ -490,7 +490,7 @@ async def delete_confirm(request: Request, path: str):
     count = sum(1 for _ in p.rglob("*") if _.is_file()) if p.is_dir() else 1
     warn = f"This folder contains {count} file(s). Deleting it removes everything inside, permanently." if p.is_dir() else "This file will be deleted permanently."
     body = f"""<div style="font-size:.85rem">{warn}</div><div style="display:flex;gap:.5rem;margin-top:1rem">
-        <button class="ui-btn" style="color:#ff5f5f" hx-post="{_P}/delete" hx-vals='{{"path":"{UI.escape(path)}"}}' hx-target="#wiki-tree-panel" hx-swap="innerHTML" onclick="UI_closeModal('wiki-delete')">Delete</button>
+        <button class="ui-btn" style="color:#ff5f5f" hx-post="{_P}/delete" hx-vals='{{"path":"{UI.escape(path)}"}}' hx-target="#wiki-tree-panel" hx-swap="innerHTML" hx-on::after-request="UI_closeModal('wiki-delete')">Delete</button>
         <button class="ui-btn" onclick="UI_closeModal('wiki-delete')">Cancel</button>
     </div>"""
     return HTMLResponse(UI.modal("wiki-delete", f"Confirm delete: {Path(path).name}", body))
