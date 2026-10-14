@@ -226,7 +226,25 @@ def init_module(env: dict):
                 return imr.raw(f'<span style="color:#ff5f5f;font-size:.7rem">&#x26A0; {UI.escape(str(e))}</span>')    
 
     DE = _WikiEditor(base_url=_P, autosave_delay="2000ms", enable_graphviz=True, intent_prefix="wiki", IM=IM, nesting_level=1, file_manager=FM, get_tab=_wiki_get_tab, theme=env.get("theme", {}), render_kwargs_fn=lambda: {"loose_breaks": bool(SM.get("loose_breaks"))})
+    if "register_service" in ENV: ENV["register_service"]("wiki", {"pages": pages, "append": append})   # Muninn / Huginn: suggest a page for a note, and add it there once accepted
     print("[Wiki] ready")
+
+# --- For other modules (the "wiki" service) ---
+
+def pages(request=None) -> list:
+    """Every Markdown page, as a path under the wiki root (hidden folders left out) - the places a note can be suggested to go. With a request: only the pages that login may edit."""
+    return sorted(r for r in (str(p.relative_to(WIKI_ROOT)) for p in WIKI_ROOT.rglob("*.md")) if not any(x.startswith(".") for x in Path(r).parts) and (request is None or _can_edit(request, r)))
+
+def append(request, path: str, text: str) -> str:
+    """Adds text at the end of a page, for a login allowed to edit it; a page (and its folders) that does not exist yet is made. Nothing already on the page changes."""
+    rel = str(path).strip().lstrip("/")
+    if not rel.endswith(".md") or ".." in Path(rel).parts: raise ValueError(f"not a wiki page path: {rel}")
+    if not _can_edit(request, rel): raise PermissionError(f"you may not edit {rel}")
+    p = resolve_path(rel)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    old = p.read_text(encoding="utf-8") if p.exists() else "# " + Path(rel).stem.replace("_", " ").replace("-", " ") + "\n"
+    p.write_text(f"{old.rstrip()}\n\n{str(text).strip()}\n", encoding="utf-8")
+    return rel
 
 # --- Rendering ---
 
