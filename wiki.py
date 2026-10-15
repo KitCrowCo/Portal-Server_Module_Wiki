@@ -121,9 +121,17 @@ async def _intent_wiki_link(request, payload, imr):
 
 def _rules_path() -> Path: return DATA_DIR / "access_rules.json"
 def _tags_path() -> Path: return DATA_DIR / "tags.json"
-def _load_rules() -> list: return json.loads(_rules_path().read_text()) if _rules_path().exists() else []
+_JSON_CACHE = {}   # path -> (mtime, parsed): the rules and tags are read for every row of the tree, so they are parsed again only when the file changed
+
+def _cached_json(p: Path, empty):
+    if not p.exists(): return empty
+    t = p.stat().st_mtime_ns
+    if _JSON_CACHE.get(p, (None,))[0] != t: _JSON_CACHE[p] = (t, json.loads(p.read_text()))
+    return _JSON_CACHE[p][1]
+
+def _load_rules() -> list: return _cached_json(_rules_path(), [])
 def _save_rules(rules: list): _rules_path().write_text(json.dumps(rules, indent=2))
-def _load_tags() -> dict: return json.loads(_tags_path().read_text()) if _tags_path().exists() else {}
+def _load_tags() -> dict: return _cached_json(_tags_path(), {})
 def _save_tags(tags: dict): _tags_path().write_text(json.dumps(tags, indent=2))
 
 def _matching_rules(rel_path: str, scope: str) -> list:
